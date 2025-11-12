@@ -31,8 +31,8 @@ services:
     # Configuración de red
     network_mode: bridge
     
-    # Reiniciar automáticamente si falla
-    restart: unless-stopped
+    # Reiniciar automáticamente si falla (pero no si sale con código 0)
+    restart: on-failure
     
     # Configuración de recursos
     shm_size: '2gb'

@@ -374,9 +374,50 @@ if COOKIES_FILE.exists():
         if not is_session_active(driver):
             print("[!] Chrome se cerró. Por favor, ejecuta el script nuevamente.")
             exit(1)
-        print("[!] Por favor, inicia sesión manualmente en LinkedIn")
-        input("[+] Presiona Enter cuando hayas iniciado sesión...")
-        # Guardar cookies para próxima vez
+        
+        # En Docker, no podemos usar input() - esperar tiempo razonable o salir
+        if IS_DOCKER:
+            print("[!] Modo Docker detectado - no se puede hacer login interactivo")
+            print("[!] Por favor, sube las cookies manualmente al volumen /data/cookies/cookies.pkl")
+            print("[!] O ejecuta el contenedor de forma interactiva para hacer login inicial")
+            print("[!] Saliendo...")
+            exit(1)
+        else:
+            print("[!] Por favor, inicia sesión manualmente en LinkedIn")
+            input("[+] Presiona Enter cuando hayas iniciado sesión...")
+            # Guardar cookies para próxima vez
+            if is_session_active(driver):
+                cookies = driver.get_cookies()
+                with open(COOKIES_FILE, 'wb') as f:
+                    pickle.dump(cookies, f)
+                print("[+] Cookies guardadas para próxima ejecución")
+            else:
+                print("[!] No se pudieron guardar cookies - Chrome se cerró")
+else:
+    print("[!] No se encontró archivo de cookies.")
+    
+    # Verificar sesión antes de continuar
+    if not is_session_active(driver):
+        print("[!] Chrome se cerró. Por favor, ejecuta el script nuevamente.")
+        exit(1)
+    
+    # En Docker, no podemos usar input() - manejar de forma diferente
+    if IS_DOCKER:
+        print("[!] Modo Docker detectado - no se puede hacer login interactivo")
+        print("[!] INSTRUCCIONES PARA DOCKER:")
+        print("    1. Ejecuta el contenedor de forma interactiva para hacer login inicial:")
+        print("       docker-compose exec linkin bash")
+        print("       python3 main.py")
+        print("    2. O sube las cookies manualmente:")
+        print("       - Exporta cookies desde tu navegador")
+        print("       - Cópialas a /data/cookies/cookies.pkl en el volumen")
+        print("[!] Saliendo... El contenedor se reiniciará automáticamente.")
+        print("[!] Una vez que tengas las cookies, el script funcionará correctamente.")
+        exit(0)  # Salir con código 0 para que Docker no lo considere error
+    else:
+        input("[+] Presiona Enter cuando hayas iniciado sesión en LinkedIn...")
+        
+        # Guardar cookies
         if is_session_active(driver):
             cookies = driver.get_cookies()
             with open(COOKIES_FILE, 'wb') as f:
@@ -384,24 +425,6 @@ if COOKIES_FILE.exists():
             print("[+] Cookies guardadas para próxima ejecución")
         else:
             print("[!] No se pudieron guardar cookies - Chrome se cerró")
-else:
-    print("[!] No se encontró archivo de cookies. Por favor, inicia sesión manualmente.")
-    
-    # Verificar sesión antes de pedir input
-    if not is_session_active(driver):
-        print("[!] Chrome se cerró. Por favor, ejecuta el script nuevamente.")
-        exit(1)
-        
-    input("[+] Presiona Enter cuando hayas iniciado sesión en LinkedIn...")
-    
-    # Guardar cookies
-    if is_session_active(driver):
-        cookies = driver.get_cookies()
-        with open(COOKIES_FILE, 'wb') as f:
-            pickle.dump(cookies, f)
-        print("[+] Cookies guardadas para próxima ejecución")
-    else:
-        print("[!] No se pudieron guardar cookies - Chrome se cerró")
 cnt = 0
 time.sleep(4.5)
 flag = True
