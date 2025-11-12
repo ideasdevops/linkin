@@ -374,10 +374,10 @@ def load_cookies_from_json():
     
     if cookies_dir and json_file:
         print(f"[+] Encontrado archivo JSON de cookies: {json_file.name}")
-            try:
-                import json
-                with open(json_file, 'r', encoding='utf-8') as f:
-                    cookies_data = json.load(f)
+        try:
+            import json
+            with open(json_file, 'r', encoding='utf-8') as f:
+                cookies_data = json.load(f)
                 
                 # Manejar diferentes formatos de JSON
                 if isinstance(cookies_data, dict):
@@ -399,15 +399,31 @@ def load_cookies_from_json():
                 else:
                     return None
                 
-                # Convertir y guardar como pickle
-                print(f"[+] Convirtiendo {len(cookies)} cookies de JSON a pickle...")
-                with open(COOKIES_FILE, 'wb') as f:
-                    pickle.dump(cookies, f)
-                print(f"[+] ✅ Cookies convertidas y guardadas en {COOKIES_FILE}")
-                return True
-            except Exception as e:
-                print(f"[!] Error convirtiendo cookies desde JSON: {e}")
-                return False
+            # Convertir y guardar como pickle
+            print(f"[+] Convirtiendo {len(cookies)} cookies de JSON a pickle...")
+            
+            # Asegurar que el directorio de destino existe
+            COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(COOKIES_FILE, 'wb') as f:
+                pickle.dump(cookies, f)
+            print(f"[+] ✅ Cookies convertidas y guardadas en {COOKIES_FILE}")
+            
+            # Si el JSON estaba en el código (/app), copiarlo también al volumen (/data) para persistencia
+            if IS_DOCKER and str(json_file).startswith('/app'):
+                volume_json = DATA_DIR / "cookies" / json_file.name
+                volume_json.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    import shutil
+                    shutil.copy2(json_file, volume_json)
+                    print(f"[+] Archivo JSON copiado al volumen persistente: {volume_json}")
+                except Exception as e:
+                    print(f"[!] No se pudo copiar JSON al volumen (no crítico): {e}")
+            
+            return True
+        except Exception as e:
+            print(f"[!] Error convirtiendo cookies desde JSON: {e}")
+            return False
     return False
 
 # Manejo de cookies mejorado
