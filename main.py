@@ -373,20 +373,96 @@ if COOKIES_FILE.exists():
                 cookies = pickle.load(f)
             
             cookies_added = 0
+            cookies_failed = 0
             for cookie in cookies:
                 try:
-                    # Asegurar que el dominio sea correcto
+                    # Normalizar la cookie para Selenium
+                    # Selenium requiere: name, value, domain, path (opcional: expiry, secure, httpOnly)
+                    normalized_cookie = {}
+                    
+                    # Campos requeridos
+                    if 'name' not in cookie or 'value' not in cookie:
+                        print(f"[!] Cookie inválida (falta name o value): {cookie.get('name', 'unknown')}")
+                        cookies_failed += 1
+                        continue
+                    
+                    normalized_cookie['name'] = cookie['name']
+                    normalized_cookie['value'] = cookie['value']
+                    
+                    # Dominio: Selenium requiere que empiece con punto para dominios
                     if 'domain' in cookie:
-                        # LinkedIn requiere dominio .linkedin.com
-                        if not cookie['domain'].startswith('.linkedin.com') and not cookie['domain'].startswith('linkedin.com'):
-                            cookie['domain'] = '.linkedin.com'
-                    driver.add_cookie(cookie)
+                        domain = cookie['domain']
+                        # Si el dominio no empieza con punto, agregarlo (excepto si es localhost)
+                        if not domain.startswith('.') and 'linkedin.com' in domain:
+                            if domain == 'linkedin.com':
+                                normalized_cookie['domain'] = '.linkedin.com'
+                            else:
+                                normalized_cookie['domain'] = domain
+                        else:
+                            normalized_cookie['domain'] = domain
+                    else:
+                        # Si no hay dominio, usar el dominio por defecto de LinkedIn
+                        normalized_cookie['domain'] = '.linkedin.com'
+                    
+                    # Path: si no existe, usar '/'
+                    normalized_cookie['path'] = cookie.get('path', '/')
+                    
+                    # Expiry: convertir expirationDate a expiry (Selenium usa expiry)
+                    if 'expiry' in cookie:
+                        # expiry debe ser un timestamp Unix (segundos desde epoch)
+                        try:
+                            expiry = int(cookie['expiry'])
+                            if expiry > 0:
+                                normalized_cookie['expiry'] = expiry
+                        except (ValueError, TypeError):
+                            pass
+                    elif 'expirationDate' in cookie:
+                        # Convertir expirationDate a expiry
+                        try:
+                            expiry = int(cookie['expirationDate'])
+                            if expiry > 0:
+                                normalized_cookie['expiry'] = expiry
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Secure: convertir a booleano
+                    if 'secure' in cookie:
+                        normalized_cookie['secure'] = bool(cookie['secure'])
+                    elif 'httpOnly' in cookie and cookie.get('httpOnly'):
+                        # Si es httpOnly, también puede ser secure
+                        normalized_cookie['secure'] = cookie.get('secure', False)
+                    
+                    # httpOnly: Selenium no soporta httpOnly directamente, pero lo ignoramos
+                    # No incluimos httpOnly en normalized_cookie
+                    
+                    # Eliminar campos no soportados por Selenium
+                    # (sameSite, storeId, etc. no son necesarios)
+                    
+                    # Intentar agregar la cookie
+                    driver.add_cookie(normalized_cookie)
                     cookies_added += 1
+                    
                 except Exception as e:
-                    print(f"[!] No se pudo agregar cookie {cookie.get('name', 'unknown')}: {e}")
+                    error_msg = str(e) if str(e) else type(e).__name__
+                    print(f"[!] No se pudo agregar cookie '{cookie.get('name', 'unknown')}': {error_msg}")
+                    cookies_failed += 1
+                    # Mostrar detalles de la cookie para debugging (solo las primeras 3)
+                    if cookies_failed <= 3:
+                        print(f"    Detalles: domain={cookie.get('domain', 'N/A')}, path={cookie.get('path', 'N/A')}")
                     pass
             
-            print(f"[+] {cookies_added} cookies aplicadas")
+            print(f"[+] {cookies_added} cookies aplicadas exitosamente")
+            if cookies_failed > 0:
+                print(f"[!] {cookies_failed} cookies fallaron al aplicarse")
+            
+            # Verificar que al menos las cookies importantes se aplicaron
+            if cookies_added == 0:
+                print("[!] ERROR CRÍTICO: No se pudo aplicar ninguna cookie")
+                print("[!] Esto significa que las cookies no funcionarán")
+                print("[!] Verifica el formato de las cookies en el archivo pickle")
+                if IS_DOCKER:
+                    print("[!] Saliendo... Por favor, verifica las cookies")
+                    exit(0)
             
             # Refrescar para que las cookies tomen efecto
             print("[+] Refrescando página para aplicar cookies...")
