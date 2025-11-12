@@ -351,25 +351,29 @@ except Exception as e:
 # Función para cargar cookies desde JSON si existe
 def load_cookies_from_json():
     """Intenta cargar cookies desde un archivo JSON en la carpeta cookies"""
-    # Buscar en múltiples ubicaciones posibles
+    # Buscar en múltiples ubicaciones posibles (en orden de prioridad)
     possible_dirs = [
-        DATA_DIR / "cookies",  # Docker: /data/cookies
-        BASE_DIR / "cookies",  # Local: ./cookies
+        DATA_DIR / "cookies",  # Docker: /data/cookies (volumen persistente)
+        BASE_DIR / "cookies",  # Local: ./cookies o Docker: /app/cookies (código)
         Path("cookies"),       # Relativo
+        Path("/app/cookies"),  # Docker: desde código fuente
     ]
     
     cookies_dir = None
+    json_file = None
+    
+    # Buscar el primer directorio que exista y tenga archivos JSON
     for dir_path in possible_dirs:
         if dir_path.exists():
-            cookies_dir = dir_path
-            break
+            json_files = list(dir_path.glob("*.json"))
+            if json_files:
+                cookies_dir = dir_path
+                json_file = json_files[0]
+                print(f"[+] Encontrado directorio de cookies: {dir_path}")
+                break
     
-    if cookies_dir:
-        # Buscar archivos JSON de cookies
-        json_files = list(cookies_dir.glob("*.json"))
-        if json_files:
-            json_file = json_files[0]  # Usar el primer JSON encontrado
-            print(f"[+] Encontrado archivo JSON de cookies: {json_file.name}")
+    if cookies_dir and json_file:
+        print(f"[+] Encontrado archivo JSON de cookies: {json_file.name}")
             try:
                 import json
                 with open(json_file, 'r', encoding='utf-8') as f:
