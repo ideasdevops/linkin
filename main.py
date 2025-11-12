@@ -261,13 +261,10 @@ link_wait_time = 8
 print(f"[+] Navegando a LinkedIn...")
 print(f"[+] URL: {url}")
 
-try:
-    # Verificar sesión antes de navegar
-    if not is_session_active(driver):
-        raise Exception("La sesión de Chrome se perdió antes de navegar")
-    
-    print("[+] Cargando página de LinkedIn...")
-    driver.get(url)
+# Esta sección se ejecutará solo si no hay cookies o si falla la carga de cookies
+# Si las cookies se cargan correctamente, la navegación se hace en la sección de cookies
+# Por ahora, comentamos esta navegación inicial ya que se hará después de cargar cookies
+print("[+] Esperando a que se carguen las cookies antes de navegar...")
     print("[+] Página solicitada, esperando carga completa...")
     
     # Esperar más tiempo para que la página cargue completamente
@@ -479,6 +476,30 @@ if COOKIES_FILE.exists():
             else:
                 print("[+] Cookies cargadas exitosamente - Sesión activa verificada")
                 print(f"[+] URL actual: {current_url[:80]}")
+                
+                # Ahora navegar a la URL de búsqueda después de verificar login
+                print("[+] Navegando a la página de búsqueda...")
+                # Obtener keywords desde variable de entorno o usar default
+                keywords_str = os.environ.get('LINKEDIN_KEYWORDS', 'real estate')
+                keywords = [k.strip() for k in keywords_str.split(',')]
+                keyword_num = 0
+                keyword = keywords[keyword_num] if keywords else "real estate"
+                
+                url = f"https://www.linkedin.com/search/results/people/?keywords={keyword}"
+                print(f"[+] URL de búsqueda: {url}")
+                driver.get(url)
+                time.sleep(5)  # Esperar a que cargue la página de búsqueda
+                
+                # Verificar que estamos en la página correcta
+                current_url_after = driver.current_url
+                if "login" in current_url_after.lower():
+                    print("[!] ERROR: Después de navegar a búsqueda, redirigió a login")
+                    print("[!] Las cookies pueden no estar funcionando correctamente")
+                    if IS_DOCKER:
+                        print("[!] Saliendo... Por favor, verifica las cookies")
+                        exit(0)
+                else:
+                    print(f"[+] Navegación exitosa a búsqueda: {current_url_after[:80]}")
         else:
             raise Exception("La sesión se perdió al refrescar")
             
