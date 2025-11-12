@@ -359,19 +359,39 @@ if COOKIES_FILE.exists():
         if not is_session_active(driver):
             raise Exception("La sesión de Chrome no está activa")
             
-        with open(COOKIES_FILE, 'rb') as f:
-            cookies = pickle.load(f)
-        for cookie in cookies:
-            try:
-                driver.add_cookie(cookie)
-            except:
-                pass
-        
+        # Las cookies se cargarán después de navegar a LinkedIn
+        # (ver código más abajo donde se maneja la navegación)
         if is_session_active(driver):
-            # Navegar primero a LinkedIn antes de refrescar (necesario para que las cookies funcionen)
-            print("[+] Navegando a LinkedIn para aplicar cookies...")
+            # IMPORTANTE: Primero navegar a LinkedIn para establecer el dominio antes de agregar cookies
+            print("[+] Navegando a LinkedIn para establecer dominio...")
             driver.get("https://www.linkedin.com")
-            time.sleep(3)  # Esperar a que se apliquen las cookies
+            time.sleep(2)
+            
+            # Ahora agregar las cookies (deben agregarse después de estar en el dominio correcto)
+            print("[+] Aplicando cookies al dominio de LinkedIn...")
+            with open(COOKIES_FILE, 'rb') as f:
+                cookies = pickle.load(f)
+            
+            cookies_added = 0
+            for cookie in cookies:
+                try:
+                    # Asegurar que el dominio sea correcto
+                    if 'domain' in cookie:
+                        # LinkedIn requiere dominio .linkedin.com
+                        if not cookie['domain'].startswith('.linkedin.com') and not cookie['domain'].startswith('linkedin.com'):
+                            cookie['domain'] = '.linkedin.com'
+                    driver.add_cookie(cookie)
+                    cookies_added += 1
+                except Exception as e:
+                    print(f"[!] No se pudo agregar cookie {cookie.get('name', 'unknown')}: {e}")
+                    pass
+            
+            print(f"[+] {cookies_added} cookies aplicadas")
+            
+            # Refrescar para que las cookies tomen efecto
+            print("[+] Refrescando página para aplicar cookies...")
+            driver.refresh()
+            time.sleep(5)  # Esperar a que cargue con las cookies
             
             # Verificar si estamos logueados
             current_url = driver.current_url
@@ -382,6 +402,17 @@ if COOKIES_FILE.exists():
                 print("[!] Advertencia: Las cookies no funcionaron, todavía estamos en la página de login")
                 print(f"[!] URL actual: {current_url[:80]}")
                 print("[!] Las cookies pueden estar expiradas o ser inválidas")
+                print("[!] Verificando cookies importantes...")
+                
+                # Verificar cookies importantes
+                all_cookies = driver.get_cookies()
+                cookie_names = [c.get('name', '') for c in all_cookies]
+                important_cookies = ['li_at', 'JSESSIONID', 'li_rm']
+                found_important = [name for name in important_cookies if name in cookie_names]
+                
+                if not found_important:
+                    print("[!] No se encontraron cookies importantes (li_at, JSESSIONID, li_rm)")
+                    print("[!] Las cookies exportadas pueden no ser válidas")
                 
                 if IS_DOCKER:
                     print("[!] En Docker, necesitas cookies válidas y recientes")
@@ -409,16 +440,17 @@ if COOKIES_FILE.exists():
                 keyword_num = 0
                 keyword = keywords[keyword_num] if keywords else "real estate"
                 
-                url = f"https://www.linkedin.com/search/results/people/?keywords={keyword}"
+                url = f"https://www.linkedin.com/search/results/people/?keywords={keyword.replace(' ', '+')}"
                 print(f"[+] URL de búsqueda: {url}")
                 driver.get(url)
-                time.sleep(5)  # Esperar a que cargue la página de búsqueda
+                time.sleep(8)  # Esperar más tiempo a que cargue la página de búsqueda
                 
                 # Verificar que estamos en la página correcta
                 current_url_after = driver.current_url
                 if "login" in current_url_after.lower():
                     print("[!] ERROR: Después de navegar a búsqueda, redirigió a login")
                     print("[!] Las cookies pueden no estar funcionando correctamente")
+                    print(f"[!] URL final: {current_url_after[:100]}")
                     if IS_DOCKER:
                         print("[!] Saliendo... Por favor, verifica las cookies")
                         exit(0)
