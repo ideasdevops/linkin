@@ -265,85 +265,9 @@ print(f"[+] URL: {url}")
 # Si las cookies se cargan correctamente, la navegación se hace en la sección de cookies
 # Por ahora, comentamos esta navegación inicial ya que se hará después de cargar cookies
 print("[+] Esperando a que se carguen las cookies antes de navegar...")
-    print("[+] Página solicitada, esperando carga completa...")
-    
-    # Esperar más tiempo para que la página cargue completamente
-    time.sleep(link_wait_time)
-    
-    # Verificar sesión después de cargar
-    if not is_session_active(driver):
-        raise Exception("La sesión de Chrome se perdió después de cargar la página")
-    
-    # Verificar que la página se cargó
-    current_url = driver.current_url
-    page_title = driver.title
-    print(f"[+] Página cargada - Título: {page_title[:50]}...")
-    print(f"[+] URL actual: {current_url[:80]}...")
-    
-    # Verificar contenido de la página
-    page_source_length = len(driver.page_source)
-    print(f"[+] Tamaño del contenido de la página: {page_source_length} caracteres")
-    
-    if page_source_length < 1000:
-        print("[!] La página parece estar vacía o no cargó correctamente")
-        if is_session_active(driver):
-            print("[!] Intentando refrescar...")
-            driver.refresh()
-            time.sleep(5)
-            page_source_length = len(driver.page_source)
-            print(f"[+] Después del refresh - Tamaño: {page_source_length} caracteres")
-        else:
-            print("[!] La sesión se perdió, no se puede refrescar")
-        
-        if page_source_length < 1000:
-            print("[!] La página sigue vacía después del refresh")
-            print("[!] Puede ser un problema de conexión o LinkedIn está bloqueando el acceso")
-            print("[!] Por favor, verifica manualmente en el navegador")
-    
-except Exception as e:
-    error_msg = str(e)
-    print(f"[!] Error cargando la página: {error_msg}")
-    
-    # Verificar si la sesión sigue activa
-    if "session" in error_msg.lower() or "disconnected" in error_msg.lower():
-        print("[!] La sesión de Chrome se perdió. Chrome puede haberse cerrado.")
-        print("[!] Esto puede deberse a:")
-        print("    - Chrome se cerró automáticamente")
-        print("    - Problema con la extensión")
-        print("    - Problema de permisos o seguridad")
-        print("[!] Por favor, verifica que Chrome sigue abierto")
-        
-        # Intentar reiniciar Chrome
-        print("[+] Intentando reiniciar Chrome...")
-        try:
-            driver.quit()
-        except:
-            pass
-        
-        # Esperar un momento
-        time.sleep(2)
-        
-        # Intentar iniciar nuevamente
-        try:
-            driver = uc.Chrome(options=uc_options, use_subprocess=True, version_main=None)
-            print("[+] Chrome reiniciado, intentando cargar página nuevamente...")
-            driver.get(url)
-            time.sleep(link_wait_time)
-            print("[+] Segunda intento completado")
-        except Exception as e2:
-            print(f"[!] Error al reiniciar: {e2}")
-            print("[!] Por favor, ejecuta el script nuevamente")
-    else:
-        print("[!] Intentando nuevamente...")
-        time.sleep(3)
-        if is_session_active(driver):
-            try:
-                driver.get(url)
-                time.sleep(link_wait_time)
-                print("[+] Segunda intento completado")
-            except Exception as e2:
-                print(f"[!] Error persistente: {e2}")
-                print("[!] Por favor, verifica manualmente que Chrome puede acceder a LinkedIn")
+
+# La navegación a la URL de búsqueda ahora se hace después de cargar cookies exitosamente
+# Ver sección de carga de cookies más abajo
 
 # Función para cargar cookies desde JSON si existe
 def load_cookies_from_json():
