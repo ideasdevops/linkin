@@ -6,10 +6,22 @@ import os
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
-app_password = os.environ["GMAIL_APP_PASSWORD"]
-# print(app_password)
+# Obtener contraseña de aplicación de forma opcional
+app_password = os.environ.get("GMAIL_APP_PASSWORD", None)
+EMAIL_ENABLED = app_password is not None
+
+if not EMAIL_ENABLED:
+    print("[!] Advertencia: GMAIL_APP_PASSWORD no está configurado. El envío de emails está deshabilitado.")
+    print("[!] Para habilitar emails, crea un archivo .env con: GMAIL_APP_PASSWORD=tu_contraseña")
 
 def send_email(rec_email:str, name:str):
+    """
+    Envía un email al destinatario. Si GMAIL_APP_PASSWORD no está configurado,
+    la función retorna sin hacer nada.
+    """
+    if not EMAIL_ENABLED:
+        print(f"[!] Envío de email deshabilitado. Email no enviado a {rec_email}")
+        return
     sender_email = "saadmohsinparoopia@gmail.com"
     rec_email = rec_email
     password = app_password

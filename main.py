@@ -4,45 +4,404 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time, csv, pickle
 import undetected_chromedriver as uc
+import os
+from pathlib import Path
 from email_send import send_email
 
 #--------------------------------------------------------#
 
+# Detectar si estamos en Docker
+IS_DOCKER = os.path.exists('/.dockerenv') or os.environ.get('DOCKER_CONTAINER') == 'true'
+
+# Configuración de paths - usar /data en Docker, local en desarrollo
+if IS_DOCKER:
+    BASE_DIR = Path('/app')
+    DATA_DIR = Path('/data')
+    COOKIES_FILE = DATA_DIR / "cookies" / "cookies.pkl"
+    OUTPUT_CSV = DATA_DIR / "output" / "output.csv"
+    print("[+] Modo Docker detectado - usando paths persistentes")
+else:
+    BASE_DIR = Path(__file__).parent.absolute()
+    DATA_DIR = BASE_DIR
+    COOKIES_FILE = BASE_DIR / "cookies.pkl"
+    OUTPUT_CSV = BASE_DIR / "output.csv"
+    print("[+] Modo local - usando paths locales")
+
+EXTENSION_PATH = BASE_DIR / "allforleads"
+
+# Crear directorios si no existen
+if IS_DOCKER:
+    COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+
+# Verificar si la extensión existe
+if not EXTENSION_PATH.exists():
+    print(f"[!] Advertencia: La carpeta de extensión '{EXTENSION_PATH}' no existe.")
+    print("[!] Por favor, descomprime 'allforleads.zip' en la carpeta del proyecto.")
+    extension_path_str = None
+else:
+    extension_path_str = str(EXTENSION_PATH)
+
 options = webdriver.ChromeOptions()
-options.add_argument('--start-maximized')
-# options.add_argument('--headless')
-options.add_argument('--no-sandbox')
-path = r"B:\Ahmed'sCode\Linkedin-Leads-Generation\allforleads"
-options.add_argument(f'--load-extension={path}')
+# En Docker, usar modo headless
+if IS_DOCKER:
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    print("[+] Configuración Chrome para Docker (headless)")
+else:
+    options.add_argument('--start-maximized')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--force-device-scale-factor=1')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    print("[+] Configuración Chrome para local")
+# Opciones experimentales (comentadas si causan problemas)
+# options.add_experimental_option("excludeSwitches", ["enable-automation"])
+# options.add_experimental_option('useAutomationExtension', False)
+if extension_path_str:
+    options.add_argument(f'--load-extension={extension_path_str}')
 options.add_argument('--log-level=3')
 
-with open('output.csv', 'w', newline='', encoding="utf-8") as f:
+# Función para extraer todos los emails y teléfonos disponibles
+def extract_all_contact_data(driver, wait):
+    """
+    Extrae todos los emails y números de teléfono disponibles del perfil.
+    Retorna: (lista_emails, lista_telefonos)
+    """
+    emails = []
+    phone_numbers = []
+    
+    try:
+        # Buscar todos los elementos de contacto de la extensión
+        # Los emails generalmente están en ContactData_1, ContactData_2, etc.
+        # Los teléfonos están en ContactData_3, ContactData_4, etc.
+        # Pero necesitamos buscar todos los elementos disponibles
+        
+        # Buscar todos los elementos que contengan datos de contacto
+        contact_elements = driver.find_elements(
+            By.XPATH, 
+            "//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[contains(@class, 'KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContent')]"
+        )
+        
+        for element in contact_elements:
+            try:
+                text = element.text.strip()
+                if not text:
+                    continue
+                
+                # Detectar si es email o teléfono
+                if '@' in text and '.' in text:
+                    # Es un email
+                    if text not in emails:
+                        emails.append(text)
+                elif any(char.isdigit() for char in text) and ('+' in text or '-' in text or '(' in text or len([c for c in text if c.isdigit()]) >= 7):
+                    # Es probablemente un número de teléfono
+                    if text not in phone_numbers:
+                        phone_numbers.append(text)
+            except:
+                continue
+        
+        # Método alternativo: buscar por patrones específicos de la extensión
+        # Buscar emails (ContactData_1, ContactData_2, etc. que contengan @)
+        email_index = 1
+        while True:
+            try:
+                email_xpath = f"//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[contains(@class, 'KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContentContactData_{email_index}')]"
+                email_element = driver.find_element(By.XPATH, email_xpath)
+                email_text = email_element.text.strip()
+                if email_text and '@' in email_text:
+                    if email_text not in emails:
+                        emails.append(email_text)
+                email_index += 1
+            except:
+                break
+        
+        # Buscar teléfonos (ContactData_3, ContactData_4, etc. o cualquier ContactData que no sea email)
+        phone_index = 1
+        while True:
+            try:
+                phone_xpath = f"//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[contains(@class, 'KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContentContactData_{phone_index}')]"
+                phone_element = driver.find_element(By.XPATH, phone_xpath)
+                phone_text = phone_element.text.strip()
+                # Verificar que no sea un email y que parezca un teléfono
+                if phone_text and '@' not in phone_text and (any(char.isdigit() for char in phone_text)):
+                    if phone_text not in phone_numbers:
+                        phone_numbers.append(phone_text)
+                phone_index += 1
+            except:
+                break
+                
+    except Exception as e:
+        print(f"[!] Error extrayendo datos de contacto: {e}")
+    
+    return emails, phone_numbers
+
+# Inicializar CSV con columnas dinámicas (máximo 10 emails y 10 teléfonos para mantener estructura)
+max_emails = 10
+max_phones = 10
+csv_headers = ['Name', 'Headline', 'Linkedin URL'] + \
+              [f'Email {i+1}' for i in range(max_emails)] + \
+              [f'Phone Number {i+1}' for i in range(max_phones)]
+
+with open(OUTPUT_CSV, 'w', newline='', encoding="utf-8") as f:
     writer = csv.writer(f)
-    writer.writerow(['Name', 'Headline', 'Linkedin URL', 'Email 1', 'Email 2', 'Phone Number 1', 'Phone Number 2'])
+    writer.writerow(csv_headers)
 
 # -------------------------------------------------------#
 
-print('[+] This is made by "Ahmed Mujtaba" ')
-driver = webdriver.Chrome(options=options)
-driver.maximize_window()
-wait = WebDriverWait(driver, 5)
-keywords = ["real estate"]
+print('[+] LinkedIn Leads Generation - Sistema mejorado')
+print('[+] Configurado para localhost')
+
+# Función para verificar que la sesión de Chrome está activa
+def is_session_active(driver):
+    """Verifica si la sesión de Chrome está activa"""
+    try:
+        driver.current_url
+        return True
+    except:
+        return False
+
+# Usar undetected_chromedriver para mejor compatibilidad
+# undetected_chromedriver maneja mejor las opciones, así que creamos opciones separadas
+driver = None
+try:
+    # Para undetected_chromedriver, usar opciones más simples
+    uc_options = webdriver.ChromeOptions()
+    # En Docker, usar modo headless
+    if IS_DOCKER:
+        uc_options.add_argument('--headless=new')
+        uc_options.add_argument('--no-sandbox')
+        uc_options.add_argument('--disable-dev-shm-usage')
+        uc_options.add_argument('--disable-gpu')
+        uc_options.add_argument('--disable-software-rasterizer')
+        uc_options.add_argument('--window-size=1920,1080')
+        uc_options.add_argument('--disable-blink-features=AutomationControlled')
+        print("[+] undetected_chromedriver configurado para Docker (headless)")
+    else:
+        uc_options.add_argument('--start-maximized')
+        uc_options.add_argument('--no-sandbox')
+        uc_options.add_argument('--disable-dev-shm-usage')
+        uc_options.add_argument('--disable-gpu')
+        uc_options.add_argument('--window-size=1920,1080')
+        uc_options.add_argument('--disable-blink-features=AutomationControlled')
+        print("[+] undetected_chromedriver configurado para local")
+    
+    # No cargar extensión inicialmente para evitar problemas
+    # if extension_path_str:
+    #     uc_options.add_argument(f'--load-extension={extension_path_str}')
+    uc_options.add_argument('--log-level=3')
+    
+    print("[+] Iniciando Chrome con undetected_chromedriver...")
+    driver = uc.Chrome(options=uc_options, use_subprocess=True, version_main=None)
+    print("[+] Chrome iniciado con undetected_chromedriver")
+    
+    # Verificar que la sesión está activa
+    if not is_session_active(driver):
+        raise Exception("La sesión de Chrome no está activa después de iniciar")
+        
+except Exception as e:
+    print(f"[!] Error con undetected_chromedriver: {e}")
+    print("[+] Intentando con webdriver estándar...")
+    try:
+        driver = webdriver.Chrome(options=options)
+        print("[+] Chrome iniciado con webdriver estándar")
+        
+        # Verificar que la sesión está activa
+        if not is_session_active(driver):
+            raise Exception("La sesión de Chrome no está activa después de iniciar")
+    except Exception as e2:
+        print(f"[!] Error crítico: No se pudo iniciar Chrome: {e2}")
+        print("[!] Por favor, verifica que Chrome está instalado correctamente")
+        exit(1)
+
+# Configurar tamaño de ventana explícitamente
+try:
+    driver.set_window_size(1920, 1080)
+    driver.maximize_window()
+    # Esperar un momento para que la ventana se renderice
+    time.sleep(3)
+except:
+    pass
+
+# Verificar display en Linux
+if os.name == 'posix':
+    display = os.environ.get('DISPLAY')
+    if not display:
+        print("[!] Advertencia: Variable DISPLAY no configurada")
+        print("[!] Si estás en un servidor remoto, configura DISPLAY o usa Xvfb")
+    else:
+        print(f"[+] DISPLAY configurado: {display}")
+
+wait = WebDriverWait(driver, 10)
+
+# Primero, verificar que Chrome funciona cargando una página simple
+print("[+] Verificando que Chrome funciona correctamente...")
+try:
+    driver.get("about:blank")
+    time.sleep(1)
+    print("[+] Chrome responde correctamente")
+except Exception as e:
+    print(f"[!] Error verificando Chrome: {e}")
+
+# Obtener keywords desde variable de entorno o usar default
+keywords_str = os.environ.get('LINKEDIN_KEYWORDS', 'real estate')
+keywords = [k.strip() for k in keywords_str.split(',')]
 keyword_num = 0
-keyword = keywords[keyword_num]
+keyword = keywords[keyword_num] if keywords else "real estate"
+print(f"[+] Keywords configuradas: {keywords}")
 url = f"https://www.linkedin.com/search/results/people/?keywords={keyword.replace(' ','+')}"
-link_wait_time = 4.2
-print(f"[+] Requesting the url search of Linkedin. Waiting for {link_wait_time} second/s")
-driver.get(url)
-time.sleep(link_wait_time)
-# user_input = input("Are you done? [y/n]: ")
-# cookies = driver.get_cookies()
-# with open('cookies.pkl', 'wb') as f:
-#     pickle.dump(cookies, f)
-with open('cookies.pkl', 'rb') as f:
-    cookies = pickle.load(f)
-for cookie in cookies:
-    driver.add_cookie(cookie)
-driver.refresh()
+link_wait_time = 8
+print(f"[+] Navegando a LinkedIn...")
+print(f"[+] URL: {url}")
+
+try:
+    # Verificar sesión antes de navegar
+    if not is_session_active(driver):
+        raise Exception("La sesión de Chrome se perdió antes de navegar")
+    
+    print("[+] Cargando página de LinkedIn...")
+    driver.get(url)
+    print("[+] Página solicitada, esperando carga completa...")
+    
+    # Esperar más tiempo para que la página cargue completamente
+    time.sleep(link_wait_time)
+    
+    # Verificar sesión después de cargar
+    if not is_session_active(driver):
+        raise Exception("La sesión de Chrome se perdió después de cargar la página")
+    
+    # Verificar que la página se cargó
+    current_url = driver.current_url
+    page_title = driver.title
+    print(f"[+] Página cargada - Título: {page_title[:50]}...")
+    print(f"[+] URL actual: {current_url[:80]}...")
+    
+    # Verificar contenido de la página
+    page_source_length = len(driver.page_source)
+    print(f"[+] Tamaño del contenido de la página: {page_source_length} caracteres")
+    
+    if page_source_length < 1000:
+        print("[!] La página parece estar vacía o no cargó correctamente")
+        if is_session_active(driver):
+            print("[!] Intentando refrescar...")
+            driver.refresh()
+            time.sleep(5)
+            page_source_length = len(driver.page_source)
+            print(f"[+] Después del refresh - Tamaño: {page_source_length} caracteres")
+        else:
+            print("[!] La sesión se perdió, no se puede refrescar")
+        
+        if page_source_length < 1000:
+            print("[!] La página sigue vacía después del refresh")
+            print("[!] Puede ser un problema de conexión o LinkedIn está bloqueando el acceso")
+            print("[!] Por favor, verifica manualmente en el navegador")
+    
+except Exception as e:
+    error_msg = str(e)
+    print(f"[!] Error cargando la página: {error_msg}")
+    
+    # Verificar si la sesión sigue activa
+    if "session" in error_msg.lower() or "disconnected" in error_msg.lower():
+        print("[!] La sesión de Chrome se perdió. Chrome puede haberse cerrado.")
+        print("[!] Esto puede deberse a:")
+        print("    - Chrome se cerró automáticamente")
+        print("    - Problema con la extensión")
+        print("    - Problema de permisos o seguridad")
+        print("[!] Por favor, verifica que Chrome sigue abierto")
+        
+        # Intentar reiniciar Chrome
+        print("[+] Intentando reiniciar Chrome...")
+        try:
+            driver.quit()
+        except:
+            pass
+        
+        # Esperar un momento
+        time.sleep(2)
+        
+        # Intentar iniciar nuevamente
+        try:
+            driver = uc.Chrome(options=uc_options, use_subprocess=True, version_main=None)
+            print("[+] Chrome reiniciado, intentando cargar página nuevamente...")
+            driver.get(url)
+            time.sleep(link_wait_time)
+            print("[+] Segunda intento completado")
+        except Exception as e2:
+            print(f"[!] Error al reiniciar: {e2}")
+            print("[!] Por favor, ejecuta el script nuevamente")
+    else:
+        print("[!] Intentando nuevamente...")
+        time.sleep(3)
+        if is_session_active(driver):
+            try:
+                driver.get(url)
+                time.sleep(link_wait_time)
+                print("[+] Segunda intento completado")
+            except Exception as e2:
+                print(f"[!] Error persistente: {e2}")
+                print("[!] Por favor, verifica manualmente que Chrome puede acceder a LinkedIn")
+
+# Manejo de cookies mejorado
+if COOKIES_FILE.exists():
+    try:
+        # Verificar sesión antes de cargar cookies
+        if not is_session_active(driver):
+            raise Exception("La sesión de Chrome no está activa")
+            
+        with open(COOKIES_FILE, 'rb') as f:
+            cookies = pickle.load(f)
+        for cookie in cookies:
+            try:
+                driver.add_cookie(cookie)
+            except:
+                pass
+        
+        if is_session_active(driver):
+            driver.refresh()
+            print("[+] Cookies cargadas exitosamente")
+        else:
+            raise Exception("La sesión se perdió al refrescar")
+            
+    except Exception as e:
+        print(f"[!] Error cargando cookies: {e}")
+        if not is_session_active(driver):
+            print("[!] Chrome se cerró. Por favor, ejecuta el script nuevamente.")
+            exit(1)
+        print("[!] Por favor, inicia sesión manualmente en LinkedIn")
+        input("[+] Presiona Enter cuando hayas iniciado sesión...")
+        # Guardar cookies para próxima vez
+        if is_session_active(driver):
+            cookies = driver.get_cookies()
+            with open(COOKIES_FILE, 'wb') as f:
+                pickle.dump(cookies, f)
+            print("[+] Cookies guardadas para próxima ejecución")
+        else:
+            print("[!] No se pudieron guardar cookies - Chrome se cerró")
+else:
+    print("[!] No se encontró archivo de cookies. Por favor, inicia sesión manualmente.")
+    
+    # Verificar sesión antes de pedir input
+    if not is_session_active(driver):
+        print("[!] Chrome se cerró. Por favor, ejecuta el script nuevamente.")
+        exit(1)
+        
+    input("[+] Presiona Enter cuando hayas iniciado sesión en LinkedIn...")
+    
+    # Guardar cookies
+    if is_session_active(driver):
+        cookies = driver.get_cookies()
+        with open(COOKIES_FILE, 'wb') as f:
+            pickle.dump(cookies, f)
+        print("[+] Cookies guardadas para próxima ejecución")
+    else:
+        print("[!] No se pudieron guardar cookies - Chrome se cerró")
 cnt = 0
 time.sleep(4.5)
 flag = True
@@ -90,31 +449,53 @@ for i in range(500000000000):
                         time.sleep(2)
                     except:pass
         try:
-            email1 = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContent KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContentContactData_1']"))).text
-            email2 = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContent KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContentContactData_2']"))).text
-            phone_number1 = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContent KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContentContactData_3']"))).text
-            phone_number2 = wait.until(EC.presence_of_element_located((By.XPATH,"//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowData']//div[@class='KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContent KLM_extensionSingleProfileViewWrapperBlockSingleRowDataContentContactData_4']"))).text
-            print("Name : ", lead_name)
-            print("Headline : ", headline)
-            print("Linkedin URL : ", profile_url)
-            print("Email [1] : ", email1)
-            print("Email [2] : ", email2)
-            print("Phone Number [1] : ", phone_number1)
-            print("Phone Number [2] : ", phone_number2)
-
-            if email1:
-                send_email(email1, lead_name)
-            if email2:
-                send_email(email2, lead_name)
-            with open('output.csv', 'a', newline='', encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([lead_name, headline, profile_url, email1, email2, phone_number1, phone_number2])
+            # Extraer todos los emails y teléfonos disponibles
+            emails, phone_numbers = extract_all_contact_data(driver, wait)
             
-            found_lead += 1
-            print(f"Found [{found_lead}] LEADs")
-            print("-----------------------------------------------------")
+            if emails or phone_numbers:
+                print("Name : ", lead_name)
+                print("Headline : ", headline)
+                print("Linkedin URL : ", profile_url)
+                
+                # Mostrar todos los emails encontrados
+                for idx, email in enumerate(emails, 1):
+                    print(f"Email [{idx}] : ", email)
+                
+                # Mostrar todos los teléfonos encontrados
+                for idx, phone in enumerate(phone_numbers, 1):
+                    print(f"Phone Number [{idx}] : ", phone)
+                
+                # Enviar emails a todos los encontrados
+                for email in emails:
+                    if email:
+                        try:
+                            send_email(email, lead_name)
+                        except Exception as e:
+                            print(f"[!] Error enviando email a {email}: {e}")
+                
+                # Preparar fila para CSV (rellenar hasta max_emails y max_phones)
+                csv_row = [lead_name, headline, profile_url]
+                # Agregar emails (rellenar con '' si hay menos)
+                for i in range(max_emails):
+                    csv_row.append(emails[i] if i < len(emails) else '')
+                # Agregar teléfonos (rellenar con '' si hay menos)
+                for i in range(max_phones):
+                    csv_row.append(phone_numbers[i] if i < len(phone_numbers) else '')
+                
+                # Guardar en CSV
+                with open(OUTPUT_CSV, 'a', newline='', encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(csv_row)
+                
+                found_lead += 1
+                print(f"[+] Encontrados [{found_lead}] LEADs")
+                print("-----------------------------------------------------")
+            else:
+                print(f"[!] No se encontraron datos de contacto para {lead_name}")
 
-        except:pass
+        except Exception as e:
+            print(f"[!] Error procesando perfil: {e}")
+            pass
         # time.sleep(500000)
         driver.close()
         driver.switch_to.window(driver.window_handles[0])
