@@ -1,4 +1,4 @@
-# 🚀 Instrucciones Rápidas - LinkedIn Leads Generation
+# 🚀 Instrucciones Rápidas - Link-IN
 
 ## ✅ Estado Actual
 - ✅ Entorno virtual creado (`venv`)

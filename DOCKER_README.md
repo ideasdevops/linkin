@@ -1,4 +1,4 @@
-# 🐳 Docker Deployment - LinkedIn Leads Generation
+# 🐳 Docker Deployment - Link-IN
 
 ## 📋 Requisitos
 
@@ -54,7 +54,7 @@ Los datos se guardan en volúmenes de Docker:
 docker-compose exec linkedin-leads cat /data/output/output.csv
 
 # Copiar el CSV al host
-docker cp linkedin-leads-generation:/data/output/output.csv ./output.csv
+docker cp linkin:/data/output/output.csv ./output.csv
 
 # Ver logs
 docker-compose logs linkedin-leads
@@ -162,7 +162,7 @@ docker-compose ps
 ### Ver uso de recursos
 
 ```bash
-docker stats linkedin-leads-generation
+docker stats linkin
 ```
 
 ## 🔒 Seguridad

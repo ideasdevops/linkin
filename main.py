@@ -156,7 +156,7 @@ with open(OUTPUT_CSV, 'w', newline='', encoding="utf-8") as f:
 
 # -------------------------------------------------------#
 
-print('[+] LinkedIn Leads Generation - Sistema mejorado')
+print('[+] Link-IN - Sistema mejorado')
 print('[+] Configurado para localhost')
 
 # Función para verificar que la sesión de Chrome está activa

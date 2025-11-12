@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "[+] LinkedIn Leads Generation - Docker Entrypoint"
+echo "[+] Link-IN - Docker Entrypoint"
 echo "[+] Inicializando contenedor..."
 
 # Verificar que Chrome está instalado

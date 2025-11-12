@@ -1,4 +1,4 @@
-# LinkedIn Leads Generation - Guía de Instalación y Uso
+# Link-IN - Guía de Instalación y Uso
 
 ## 📋 Requisitos Previos
 
@@ -14,14 +14,14 @@
 
 **En Linux/Ubuntu/Debian:**
 ```bash
-cd Linkedin-Leads-Generation
+cd linkin
 python3 -m venv venv
 source venv/bin/activate
 ```
 
 **En Windows:**
 ```bash
-cd Linkedin-Leads-Generation
+cd linkin
 python -m venv venv
 venv\Scripts\activate
 ```

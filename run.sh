@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script para ejecutar LinkedIn Leads Generation
+# Script para ejecutar Link-IN
 # Uso: ./run.sh
 
 # Colores para output
@@ -9,7 +9,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}[+] LinkedIn Leads Generation${NC}"
+echo -e "${GREEN}[+] Link-IN${NC}"
 echo ""
 
 # Verificar si el entorno virtual existe

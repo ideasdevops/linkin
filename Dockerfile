@@ -1,4 +1,4 @@
-# Dockerfile para LinkedIn Leads Generation
+# Dockerfile para Link-IN
 # Basado en Python con Chrome y Selenium para automatización web
 FROM python:3.11-slim
 

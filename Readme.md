@@ -1,8 +1,8 @@
-# LinkedIn Leads Generation with Python and Selenium
+# Link-IN - LinkedIn Leads Generation
 
 ## Overview
 
-This repository contains Python scripts using Selenium for LinkedIn leads generation. The automation script allows you to interact with LinkedIn to extract valuable information for lead generation purposes.
+**Link-IN** es una herramienta de automatización para generación de leads de LinkedIn usando Python y Selenium. El script permite interactuar con LinkedIn para extraer información valiosa para generación de leads.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Before running the scripts, ensure you have the following:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/ahmedmujtaba1/Linkedin-Leads-Generation.git
+   git clone https://github.com/ideasdevops/linkin.git
    
 2. Install the required modules.
 3. Make Account on [ALLFORLEADS](https://www.allforleads.com/) and download its chrome extension zip. 

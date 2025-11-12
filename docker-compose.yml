@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: linkedin-leads-generation
+    container_name: linkin
     environment:
       # Configuración de Python
       - PYTHONUNBUFFERED=1
