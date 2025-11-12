@@ -447,8 +447,38 @@ if COOKIES_FILE.exists():
                 pass
         
         if is_session_active(driver):
-            driver.refresh()
-            print("[+] Cookies cargadas exitosamente")
+            # Navegar primero a LinkedIn antes de refrescar (necesario para que las cookies funcionen)
+            print("[+] Navegando a LinkedIn para aplicar cookies...")
+            driver.get("https://www.linkedin.com")
+            time.sleep(3)  # Esperar a que se apliquen las cookies
+            
+            # Verificar si estamos logueados
+            current_url = driver.current_url
+            page_title = driver.title.lower()
+            
+            # Verificar si estamos en la página de login
+            if "login" in current_url.lower() or "login" in page_title:
+                print("[!] Advertencia: Las cookies no funcionaron, todavía estamos en la página de login")
+                print(f"[!] URL actual: {current_url[:80]}")
+                print("[!] Las cookies pueden estar expiradas o ser inválidas")
+                
+                if IS_DOCKER:
+                    print("[!] En Docker, necesitas cookies válidas y recientes")
+                    print("[!] Por favor, exporta nuevas cookies desde tu navegador")
+                    print("[!] Saliendo... (no se reiniciará automáticamente)")
+                    exit(0)  # Salir con código 0 para evitar reinicio
+                else:
+                    print("[!] Por favor, inicia sesión manualmente")
+                    input("[+] Presiona Enter cuando hayas iniciado sesión...")
+                    # Guardar nuevas cookies
+                    if is_session_active(driver):
+                        cookies = driver.get_cookies()
+                        with open(COOKIES_FILE, 'wb') as f:
+                            pickle.dump(cookies, f)
+                        print("[+] Nuevas cookies guardadas")
+            else:
+                print("[+] Cookies cargadas exitosamente - Sesión activa verificada")
+                print(f"[+] URL actual: {current_url[:80]}")
         else:
             raise Exception("La sesión se perdió al refrescar")
             
@@ -508,12 +538,54 @@ else:
             print("[+] Cookies guardadas para próxima ejecución")
         else:
             print("[!] No se pudieron guardar cookies - Chrome se cerró")
+# Verificar que estamos logueados antes de continuar
+print("[+] Verificando sesión antes de buscar leads...")
+current_url = driver.current_url
+if "login" in current_url.lower():
+    print("[!] ERROR: Todavía estamos en la página de login")
+    print("[!] Las cookies no funcionaron correctamente")
+    if IS_DOCKER:
+        print("[!] Saliendo... Por favor, verifica las cookies")
+        exit(0)
+    else:
+        print("[!] Por favor, inicia sesión manualmente")
+        input("[+] Presiona Enter cuando hayas iniciado sesión...")
+
+# Esperar un momento antes de buscar leads
 cnt = 0
 time.sleep(4.5)
 flag = True
 page_no = 1
 found_lead = 0
-all_leads = wait.until(EC.presence_of_all_elements_located((By.XPATH,"//li[@class='reusable-search__result-container']//span[@class='entity-result__title-line entity-result__title-line--2-lines ']//a")))
+
+# Intentar encontrar leads con manejo de errores mejorado
+try:
+    print("[+] Buscando leads en la página...")
+    all_leads = wait.until(EC.presence_of_all_elements_located((By.XPATH,"//li[@class='reusable-search__result-container']//span[@class='entity-result__title-line entity-result__title-line--2-lines ']//a")))
+except Exception as e:
+    print(f"[!] ERROR: No se pudieron encontrar leads en la página")
+    print(f"[!] Detalles: {e}")
+    print(f"[!] URL actual: {driver.current_url[:100]}")
+    print(f"[!] Título: {driver.title[:50]}")
+    
+    # Verificar si estamos en login
+    if "login" in driver.current_url.lower():
+        print("[!] El problema es que todavía estamos en la página de login")
+        print("[!] Las cookies no están funcionando correctamente")
+        if IS_DOCKER:
+            print("[!] Saliendo... Por favor, actualiza las cookies")
+            exit(0)
+    
+    # Si no es login, puede ser otro problema
+    print("[!] Puede ser que:")
+    print("    - LinkedIn cambió su estructura HTML")
+    print("    - La página no cargó completamente")
+    print("    - LinkedIn está bloqueando el acceso")
+    print("[!] Saliendo...")
+    if IS_DOCKER:
+        exit(0)
+    else:
+        raise
 try:
     driver.find_element(By.XPATH,"(//button[@class='msg-overlay-bubble-header__control msg-overlay-bubble-header__control--new-convo-btn artdeco-button artdeco-button--circle artdeco-button--muted artdeco-button--1 artdeco-button--tertiary ember-view'])[2]").click()
 except:pass
