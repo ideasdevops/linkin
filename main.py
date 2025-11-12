@@ -348,7 +348,70 @@ except Exception as e:
                 print(f"[!] Error persistente: {e2}")
                 print("[!] Por favor, verifica manualmente que Chrome puede acceder a LinkedIn")
 
+# Función para cargar cookies desde JSON si existe
+def load_cookies_from_json():
+    """Intenta cargar cookies desde un archivo JSON en la carpeta cookies"""
+    # Buscar en múltiples ubicaciones posibles
+    possible_dirs = [
+        DATA_DIR / "cookies",  # Docker: /data/cookies
+        BASE_DIR / "cookies",  # Local: ./cookies
+        Path("cookies"),       # Relativo
+    ]
+    
+    cookies_dir = None
+    for dir_path in possible_dirs:
+        if dir_path.exists():
+            cookies_dir = dir_path
+            break
+    
+    if cookies_dir:
+        # Buscar archivos JSON de cookies
+        json_files = list(cookies_dir.glob("*.json"))
+        if json_files:
+            json_file = json_files[0]  # Usar el primer JSON encontrado
+            print(f"[+] Encontrado archivo JSON de cookies: {json_file.name}")
+            try:
+                import json
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    cookies_data = json.load(f)
+                
+                # Manejar diferentes formatos de JSON
+                if isinstance(cookies_data, dict):
+                    if 'cookies' in cookies_data:
+                        cookies = cookies_data['cookies']
+                    elif 'www.linkedin.com' in cookies_data:
+                        cookies = cookies_data['www.linkedin.com']
+                    else:
+                        # Buscar cualquier array de cookies
+                        cookies = None
+                        for key, value in cookies_data.items():
+                            if isinstance(value, list):
+                                cookies = value
+                                break
+                        if cookies is None:
+                            return None
+                elif isinstance(cookies_data, list):
+                    cookies = cookies_data
+                else:
+                    return None
+                
+                # Convertir y guardar como pickle
+                print(f"[+] Convirtiendo {len(cookies)} cookies de JSON a pickle...")
+                with open(COOKIES_FILE, 'wb') as f:
+                    pickle.dump(cookies, f)
+                print(f"[+] ✅ Cookies convertidas y guardadas en {COOKIES_FILE}")
+                return True
+            except Exception as e:
+                print(f"[!] Error convirtiendo cookies desde JSON: {e}")
+                return False
+    return False
+
 # Manejo de cookies mejorado
+# Primero intentar cargar desde JSON si no existe el pickle
+if not COOKIES_FILE.exists():
+    print("[+] No se encontró archivo de cookies pickle, buscando JSON...")
+    load_cookies_from_json()
+
 if COOKIES_FILE.exists():
     try:
         # Verificar sesión antes de cargar cookies

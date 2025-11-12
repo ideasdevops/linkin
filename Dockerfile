@@ -57,6 +57,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copiar código de la aplicación
 COPY . .
 
+# Copiar y hacer ejecutable el script de conversión de cookies
+COPY convert_cookies.py /app/convert_cookies.py
+RUN chmod +x /app/convert_cookies.py
+
 # Crear directorios necesarios para datos persistentes
 RUN mkdir -p /data/cookies \
     && mkdir -p /data/output \
